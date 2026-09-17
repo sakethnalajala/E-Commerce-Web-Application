@@ -3,11 +3,23 @@ import ApiError from '../utils/ApiError.js';
 import logger from '../utils/logger.js';
 
 /**
- * Allow-list based CORS. Production only ever accepts the configured frontend
+ * This project's own published frontends. CLIENT_URL and ADDITIONAL_CORS_ORIGINS
+ * are still the way to configure a deployment, but these are trusted by default
+ * because an unset CLIENT_URL silently falls back to http://localhost:5173 —
+ * which blocks the real site and shows up in the browser only as an opaque
+ * "cannot reach the server", with no CORS error the user can act on.
+ *
+ * These are public website addresses, not secrets. Anything else (a fork, a
+ * custom domain) is added through the environment.
+ */
+const KNOWN_PRODUCTION_ORIGINS = ['https://e-commerce-web-application-ashen.vercel.app'];
+
+/**
+ * Allow-list based CORS. Production only ever accepts known frontend
  * origins (Vercel) — never a wildcard.
  */
 const buildAllowedOrigins = () => {
-  const origins = new Set([env.clientUrl, ...env.additionalCorsOrigins]);
+  const origins = new Set([env.clientUrl, ...env.additionalCorsOrigins, ...KNOWN_PRODUCTION_ORIGINS]);
 
   if (!env.isProduction) {
     ['http://localhost:5173', 'http://127.0.0.1:5173', 'http://localhost:4173'].forEach((origin) =>
@@ -15,7 +27,7 @@ const buildAllowedOrigins = () => {
     );
   }
 
-  return [...origins].filter(Boolean);
+  return [...origins].filter(Boolean).map((origin) => origin.replace(/\/+$/, ''));
 };
 
 export const allowedOrigins = buildAllowedOrigins();

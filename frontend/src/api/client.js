@@ -20,9 +20,16 @@ const resolveBaseUrl = () => {
 
 const baseURL = resolveBaseUrl();
 
+/**
+ * Free hosting tiers (Render) suspend an idle service and take up to a minute
+ * to wake, so the first request of a visit can be very slow. The timeout has
+ * to clear that cold start, otherwise a healthy backend still looks offline.
+ */
+const REQUEST_TIMEOUT_MS = 60000;
+
 const client = axios.create({
   baseURL,
-  timeout: 30000,
+  timeout: REQUEST_TIMEOUT_MS,
   headers: { 'Content-Type': 'application/json' },
 });
 
@@ -147,9 +154,55 @@ client.interceptors.request.use((config) => {
   return config;
 });
 
+/* ------------------------------------------------------------------ */
+/* Cold-start retry                                                    */
+/* ------------------------------------------------------------------ */
+/**
+ * A suspended backend answers the first request with a timeout or a gateway
+ * error while it boots. Retrying transparently means the page fills in by
+ * itself instead of showing an error the visitor has to clear manually.
+ *
+ * Deliberately narrow:
+ *  - GET only, so a retry can never place a second order or repeat a payment.
+ *  - Only for "the server is not up yet" symptoms: no response at all, a
+ *    timeout, or 502/503/504. A real 400/401/403/404/429/500 is a genuine
+ *    answer and is surfaced immediately, unchanged.
+ */
+const COLD_START_RETRIES = 2;
+const COLD_START_BACKOFF_MS = [2000, 4000];
+
+const isColdStart = (error) => {
+  if (axios.isCancel(error)) return false;
+  const status = error.response?.status;
+  if (status) return [502, 503, 504].includes(status);
+  // No response: network failure or the client-side timeout fired.
+  return error.code === 'ECONNABORTED' || Boolean(error.request);
+};
+
+/** Retries the request when it is worth retrying; otherwise null. */
+const retryColdStart = (error) => {
+  const config = error.config;
+  const method = (config?.method ?? 'get').toLowerCase();
+  if (!config || method !== 'get' || !isColdStart(error)) return null;
+
+  config.__retryCount = config.__retryCount ?? 0;
+  if (config.__retryCount >= COLD_START_RETRIES) return null;
+
+  const delay = COLD_START_BACKOFF_MS[config.__retryCount] ?? 4000;
+  config.__retryCount += 1;
+
+  // Re-entering through client.request replays the whole interceptor chain,
+  // so the resolved value is already unwrapped — returning it here ends this
+  // chain cleanly rather than unwrapping twice.
+  return new Promise((resolve) => setTimeout(resolve, delay)).then(() => client.request(config));
+};
+
 client.interceptors.response.use(
   (response) => response.data,
   (error) => {
+    const retry = retryColdStart(error);
+    if (retry) return retry;
+
     const normalized = normalizeError(error);
 
     // 401 means the session is gone — let the auth layer clear it.
