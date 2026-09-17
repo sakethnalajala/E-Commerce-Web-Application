@@ -20,9 +20,18 @@ const buildAllowedOrigins = () => {
 
 export const allowedOrigins = buildAllowedOrigins();
 
-// Vercel preview deployments (my-app-git-branch-user.vercel.app) only pass when
-// ADDITIONAL_CORS_ORIGINS explicitly opts in with the "*.vercel.app" entry.
-const previewOriginsAllowed = env.additionalCorsOrigins.includes('*.vercel.app');
+/**
+ * Vercel gives every deployment its own hostname
+ * (my-app-<hash>-<scope>.vercel.app), so a per-deployment URL can never be
+ * pinned in CLIENT_URL. ADDITIONAL_CORS_ORIGINS opts into the whole
+ * *.vercel.app space; both "*.vercel.app" and "https://*.vercel.app" are
+ * accepted because either spelling is natural to write and getting it subtly
+ * wrong fails silently in the browser.
+ */
+const VERCEL_WILDCARDS = ['*.vercel.app', 'https://*.vercel.app', 'http://*.vercel.app'];
+const previewOriginsAllowed = env.additionalCorsOrigins.some((entry) =>
+  VERCEL_WILDCARDS.includes(entry.trim().toLowerCase().replace(/\/+$/, ''))
+);
 const VERCEL_PREVIEW_PATTERN = /^https:\/\/[a-z0-9][a-z0-9-]*\.vercel\.app$/i;
 
 export const corsOptions = {
