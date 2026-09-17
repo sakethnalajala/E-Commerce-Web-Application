@@ -67,6 +67,20 @@ export const env = {
     },
   },
 
+  /**
+   * Public showcase account offered on the login page. The server is the only
+   * place these values live — the frontend asks for them at runtime, so no
+   * credential is ever compiled into the browser bundle. Defaults match the
+   * customer created by the seed; set DEMO_LOGIN_ENABLED=false to turn the
+   * feature off entirely. Never point this at an administrator.
+   */
+  demoLogin: {
+    enabled: toBoolean(process.env.DEMO_LOGIN_ENABLED, true),
+    email: process.env.DEMO_CUSTOMER_EMAIL || 'aarav@example.com',
+    password:
+      process.env.DEMO_CUSTOMER_PASSWORD || process.env.SEED_CUSTOMER_PASSWORD || 'Customer@12345',
+  },
+
   clientUrl: (process.env.CLIENT_URL || 'http://localhost:5173').replace(/\/+$/, ''),
   serverUrl: (process.env.SERVER_URL || 'http://localhost:5000').replace(/\/+$/, ''),
   // Extra origins (comma separated) allowed to call the API, e.g. Vercel preview deployments.

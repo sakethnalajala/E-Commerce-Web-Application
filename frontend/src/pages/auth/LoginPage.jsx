@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link, useLocation, useNavigate } from 'react-router-dom';
 import { loginValidators } from '@/utils/validators';
-import { DEMO_ACCOUNTS, HOME_FOR_ROLE } from '@/constants';
+import { HOME_FOR_ROLE } from '@/constants';
 import useForm from '@/hooks/useForm';
 import useAuth from '@/hooks/useAuth';
+import useDemoAccount from '@/hooks/useDemoAccount';
 import useToast from '@/hooks/useToast';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
@@ -30,6 +31,8 @@ const LoginPage = () => {
   const { login } = useAuth();
   const toast = useToast();
   const [demoLoading, setDemoLoading] = useState(false);
+  // Configured on the server (or via local VITE_DEMO_* overrides); never hardcoded here.
+  const { account: demoAccount } = useDemoAccount();
   const socialBusy = false; // social buttons disable themselves while a popup is open
 
   // Where the visitor was heading before being asked to log in (protected route).
@@ -49,13 +52,13 @@ const LoginPage = () => {
   });
 
   /** Logs in through the normal /auth/login endpoint with the seeded demo customer. */
-  const useDemoAccount = async () => {
-    if (!DEMO_ACCOUNTS.customer || demoLoading || form.submitting) return;
+  const signInAsDemoCustomer = async () => {
+    if (!demoAccount || demoLoading || form.submitting) return;
     form.setSubmitError(null);
     setDemoLoading(true);
-    form.setValues(DEMO_ACCOUNTS.customer);
+    form.setValues(demoAccount);
     try {
-      finishLogin(await login(DEMO_ACCOUNTS.customer));
+      finishLogin(await login(demoAccount));
     } catch (error) {
       form.setSubmitError(error.message);
     } finally {
@@ -92,7 +95,7 @@ const LoginPage = () => {
         </Button>
       </form>
 
-      {DEMO_ACCOUNTS.customer && (
+      {demoAccount && (
         <section
           aria-labelledby="demo-customer-heading"
           className="relative mt-5 overflow-hidden rounded-2xl border border-brand-200/80 bg-gradient-to-br from-brand-50 via-surface to-accent-50/60 p-4 shadow-soft sm:p-5"
@@ -117,7 +120,7 @@ const LoginPage = () => {
             size="md"
             fullWidth
             className="relative mt-4"
-            onClick={useDemoAccount}
+            onClick={signInAsDemoCustomer}
             loading={demoLoading}
             disabled={form.submitting || socialBusy}
           >

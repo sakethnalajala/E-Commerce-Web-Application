@@ -5,6 +5,7 @@ import { sendSuccess, sendCreated } from '../utils/ApiResponse.js';
 import { signAccessToken, createPasswordResetToken, hashResetToken } from '../utils/token.js';
 import { sendPasswordResetEmail, isEmailConfigured } from '../services/email.service.js';
 import { providerStatus, verifyGoogle, verifyApple } from '../services/oauth.service.js';
+import { resolveDemoCustomer } from '../services/demoAccount.service.js';
 import { env } from '../config/env.js';
 import logger from '../utils/logger.js';
 
@@ -178,9 +179,19 @@ export const changePassword = asyncHandler(async (req, res) => {
 /* Social sign-in                                                      */
 /* ------------------------------------------------------------------ */
 
-/** GET /auth/providers — which social providers are configured (public client IDs only). */
+/**
+ * GET /auth/providers — how the login page can sign someone in.
+ *
+ * Public client IDs only for the social providers, plus the demo customer if
+ * the server has one that actually works. Keeping the demo credentials here
+ * rather than in the frontend means they are configuration, not something
+ * baked into the shipped JavaScript.
+ */
 export const getProviders = asyncHandler(async (_req, res) =>
-  sendSuccess(res, { message: 'Sign-in providers.', data: providerStatus() })
+  sendSuccess(res, {
+    message: 'Sign-in providers.',
+    data: { ...providerStatus(), demo: { customer: await resolveDemoCustomer() } },
+  })
 );
 
 /**
