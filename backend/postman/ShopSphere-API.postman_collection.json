@@ -1,0 +1,1531 @@
+{
+  "info": {
+    "name": "ShopSphere E-Commerce API",
+    "description": "Complete REST API for the ShopSphere e-commerce application.\n\n## Setup\n1. Import this collection **and** `ShopSphere.postman_environment.json`.\n2. Select the environment and set `baseUrl` (default `http://localhost:5000/api/v1`).\n3. Run **Authentication → Login (admin)** and **Login (customer)** first — they store `adminToken` and `customerToken` automatically via test scripts.\n4. Requests that create a resource save its id (`productId`, `categoryId`, `orderId`, `reviewId`) into the environment for the requests that follow.\n\n## Coverage\nEach folder contains success cases plus the failure cases worth proving: 400 invalid request, 401 unauthenticated, 403 forbidden (wrong role / another user's resource), 404 not found and 422 validation errors.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [{ "key": "baseUrl", "value": "http://localhost:5000/api/v1" }],
+  "auth": { "type": "noauth" },
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": ["// Collection-level hook. Tokens are set by the login requests."]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Health & Index",
+      "item": [
+        {
+          "name": "Health check",
+          "request": { "method": "GET", "url": "{{baseUrl}}/health" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('database connected', () => pm.expect(pm.response.json().data.database).to.eql('connected'));",
+                  "pm.test('running on MongoDB Atlas, not in-memory', () => pm.expect(pm.response.json().data.databaseMode).to.eql('atlas'));",
+                  "pm.test('using the ecommerce_db database', () => pm.expect(pm.response.json().data.databaseName).to.eql('ecommerce_db'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "API index",
+          "request": { "method": "GET", "url": "{{baseUrl}}/" }
+        }
+      ]
+    },
+    {
+      "name": "Authentication",
+      "item": [
+        {
+          "name": "Register (success)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman Tester\",\n  \"email\": \"postman.tester@example.com\",\n  \"password\": \"Passw0rdTest\",\n  \"phone\": \"9876500000\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/register"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test('returns a token', () => pm.expect(body.data.token).to.be.a('string'));",
+                  "pm.test('never returns the password', () => pm.expect(body.data.user).to.not.have.property('password'));",
+                  "pm.test('role defaults to customer', () => pm.expect(body.data.user.role).to.eql('customer'));",
+                  "pm.environment.set('newUserToken', body.data.token);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register (422 validation errors)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"A\",\n  \"email\": \"not-an-email\",\n  \"password\": \"weak\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/register"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('422 Unprocessable', () => pm.response.to.have.status(422));",
+                  "pm.test('reports each invalid field', () => pm.expect(pm.response.json().errors.length).to.be.above(2));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Register (409 duplicate email)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Duplicate User\",\n  \"email\": \"aarav@example.com\",\n  \"password\": \"Passw0rdTest\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/register"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('409 Conflict', () => pm.response.to.have.status(409));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login (admin)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{adminEmail}}\",\n  \"password\": \"{{adminPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('is an admin', () => pm.expect(body.data.user.role).to.eql('admin'));",
+                  "pm.environment.set('adminToken', body.data.token);",
+                  "pm.environment.set('adminId', body.data.user._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login (customer)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{customerEmail}}\",\n  \"password\": \"{{customerPassword}}\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.environment.set('customerToken', body.data.token);",
+                  "pm.environment.set('customerId', body.data.user._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Login (401 wrong password)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{customerEmail}}\",\n  \"password\": \"DefinitelyWrong1\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));",
+                  "pm.test('does not reveal whether the email exists', () => pm.expect(pm.response.json().message).to.eql('Invalid email or password.'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get me",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+            "url": "{{baseUrl}}/auth/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('no password hash in response', () => pm.expect(JSON.stringify(pm.response.json())).to.not.include('$2'));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get me (401 no token)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/auth/me" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get me (401 malformed token)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer not.a.real.token" }],
+            "url": "{{baseUrl}}/auth/me"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Forgot password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"{{customerEmail}}\"\n}" },
+            "url": "{{baseUrl}}/auth/forgot-password"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "// Outside production without SMTP the link comes back so the flow stays testable.",
+                  "if (body.data && body.data.resetUrl) {",
+                  "  pm.environment.set('resetToken', body.data.resetUrl.split('/').pop());",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Forgot password (unknown email — still 200)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"email\": \"nobody-here@example.com\"\n}" },
+            "url": "{{baseUrl}}/auth/forgot-password"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK (no account enumeration)', () => pm.response.to.have.status(200));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Reset password",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"NewPassw0rd\",\n  \"confirmPassword\": \"NewPassw0rd\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/reset-password/{{resetToken}}"
+          }
+        },
+        {
+          "name": "Reset password (400 invalid token)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"password\": \"NewPassw0rd\",\n  \"confirmPassword\": \"NewPassw0rd\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/reset-password/0000000000000000000000000000000000000000000000000000000000000000"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('400 Bad Request', () => pm.response.to.have.status(400));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Change password",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"currentPassword\": \"{{customerPassword}}\",\n  \"newPassword\": \"Passw0rdChanged\"\n}"
+            },
+            "url": "{{baseUrl}}/auth/change-password"
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+            "url": "{{baseUrl}}/auth/logout"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Products",
+      "item": [
+        {
+          "name": "List products",
+          "request": { "method": "GET", "url": "{{baseUrl}}/products?page=1&limit=12" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('includes pagination meta', () => pm.expect(body.meta).to.have.keys(['page','limit','total','totalPages','hasPrevPage','hasNextPage','sort']));",
+                  "if (body.data.products.length) {",
+                  "  pm.environment.set('productId', body.data.products[0]._id);",
+                  "  pm.environment.set('productSlug', body.data.products[0].slug);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Search + filter + sort + paginate",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/products?search=pro&brand=Aether&minPrice=1000&maxPrice=90000&rating=3&inStock=true&sort=price-asc&page=1&limit=6"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const products = pm.response.json().data.products;",
+                  "pm.test('sorted by ascending price', () => {",
+                  "  const prices = products.map(p => p.effectivePrice);",
+                  "  pm.expect(prices).to.eql([...prices].sort((a,b) => a-b));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Filter options (categories, brands, price range)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/products/filters" }
+        },
+        { "name": "Featured products", "request": { "method": "GET", "url": "{{baseUrl}}/products/featured?limit=8" } },
+        {
+          "name": "Product detail (by slug)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/products/{{productSlug}}" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('includes reviews and related products', () => {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data).to.have.property('reviews');",
+                  "  pm.expect(data).to.have.property('related');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Product detail (404 unknown)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/products/this-product-does-not-exist" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('404 Not Found', () => pm.response.to.have.status(404));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: list all (incl. archived)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/products/admin/all?page=1&limit=10"
+          }
+        },
+        {
+          "name": "Admin: list all (403 as customer)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+            "url": "{{baseUrl}}/products/admin/all"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('403 Forbidden', () => pm.response.to.have.status(403));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: create product (multipart)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Postman Test Product", "type": "text" },
+                { "key": "description", "value": "Created from the Postman collection to verify the product creation endpoint end to end.", "type": "text" },
+                { "key": "price", "value": "4999", "type": "text" },
+                { "key": "discountPrice", "value": "3999", "type": "text" },
+                { "key": "category", "value": "{{categoryId}}", "type": "text" },
+                { "key": "brand", "value": "Postman", "type": "text" },
+                { "key": "stock", "value": "25", "type": "text" },
+                { "key": "images", "type": "file", "src": [], "description": "Select 1-6 image files. Requires Cloudinary credentials on the server." }
+              ]
+            },
+            "url": "{{baseUrl}}/products"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  pm.environment.set('createdProductId', pm.response.json().data.product._id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: create product (401 no token)",
+          "request": {
+            "method": "POST",
+            "body": { "mode": "formdata", "formdata": [{ "key": "name", "value": "Should fail", "type": "text" }] },
+            "url": "{{baseUrl}}/products"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: update product",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "price", "value": "5499", "type": "text" },
+                { "key": "stock", "value": "40", "type": "text" }
+              ]
+            },
+            "url": "{{baseUrl}}/products/{{createdProductId}}"
+          }
+        },
+        {
+          "name": "Admin: update stock",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"stock\": 15\n}" },
+            "url": "{{baseUrl}}/products/{{createdProductId}}/stock"
+          }
+        },
+        {
+          "name": "Admin: delete product",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/products/{{createdProductId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Categories",
+      "item": [
+        {
+          "name": "List categories",
+          "request": { "method": "GET", "url": "{{baseUrl}}/categories" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "const categories = pm.response.json().data.categories;",
+                  "if (categories.length) pm.environment.set('categoryId', categories[0]._id);"
+                ]
+              }
+            }
+          ]
+        },
+        { "name": "Category by id", "request": { "method": "GET", "url": "{{baseUrl}}/categories/{{categoryId}}" } },
+        {
+          "name": "Admin: create category",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Postman Category\",\n  \"description\": \"Created from the Postman collection.\"\n}"
+            },
+            "url": "{{baseUrl}}/categories"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.environment.set('createdCategoryId', pm.response.json().data.category._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: create category (403 as customer)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"Nope\"\n}" },
+            "url": "{{baseUrl}}/categories"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('403 Forbidden', () => pm.response.to.have.status(403));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: update category",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"description\": \"Updated from Postman.\"\n}" },
+            "url": "{{baseUrl}}/categories/{{createdCategoryId}}"
+          }
+        },
+        {
+          "name": "Admin: delete category",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/categories/{{createdCategoryId}}"
+          }
+        },
+        {
+          "name": "Admin: delete category with products (409)",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/categories/{{categoryId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('409 Conflict', () => pm.response.to.have.status(409));"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Cart",
+      "item": [
+        {
+          "name": "Get cart",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+            "url": "{{baseUrl}}/cart"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('server computes the totals', () => {",
+                  "  const summary = pm.response.json().data.summary;",
+                  "  pm.expect(summary).to.have.property('subtotal');",
+                  "  pm.expect(summary).to.have.property('tax');",
+                  "  pm.expect(summary).to.have.property('total');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Get cart (401 anonymous)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/cart" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add to cart",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"quantity\": 1\n}" },
+            "url": "{{baseUrl}}/cart"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('200 OK', () => pm.response.to.have.status(200));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add to cart (409 exceeds stock)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"productId\": \"{{productId}}\",\n  \"quantity\": 99\n}" },
+            "url": "{{baseUrl}}/cart"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('rejected as 409 (or 422 above the per-request cap)', () => pm.expect([409, 422]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Add to cart (422 invalid product id)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"productId\": \"not-an-id\",\n  \"quantity\": 1\n}" },
+            "url": "{{baseUrl}}/cart"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('422 Unprocessable', () => pm.response.to.have.status(422));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update cart item quantity",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"quantity\": 2\n}" },
+            "url": "{{baseUrl}}/cart/{{productId}}"
+          }
+        },
+        {
+          "name": "Merge guest cart",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"items\": [\n    { \"productId\": \"{{productId}}\", \"quantity\": 1 }\n  ]\n}"
+            },
+            "url": "{{baseUrl}}/cart/merge"
+          }
+        },
+        {
+          "name": "Remove cart item",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+            "url": "{{baseUrl}}/cart/{{productId}}"
+          }
+        },
+        {
+          "name": "Clear cart",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+            "url": "{{baseUrl}}/cart"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Orders",
+      "item": [
+        {
+          "name": "Create order (checkout)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Aarav Sharma\",\n  \"phone\": \"9876543210\",\n  \"addressLine\": \"221B Residency Road, Sector 14\",\n  \"city\": \"Bengaluru\",\n  \"state\": \"Karnataka\",\n  \"postalCode\": \"560001\",\n  \"country\": \"India\"\n}"
+            },
+            "url": "{{baseUrl}}/orders",
+            "description": "Note there is no price or quantity in the body — the server recomputes everything from the persisted cart."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const order = pm.response.json().data.order;",
+                  "  pm.environment.set('orderId', order._id);",
+                  "  pm.test('server computed the total', () => {",
+                  "    pm.expect(order.totalPrice).to.eql(Math.round((order.itemsPrice + order.shippingPrice + order.taxPrice) * 100) / 100);",
+                  "  });",
+                  "  pm.test('starts as Pending', () => pm.expect(order.status).to.eql('Pending'));",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create order (400 empty cart)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"fullName\": \"Aarav Sharma\",\n  \"phone\": \"9876543210\",\n  \"addressLine\": \"221B Residency Road\",\n  \"city\": \"Bengaluru\",\n  \"state\": \"Karnataka\",\n  \"postalCode\": \"560001\"\n}"
+            },
+            "url": "{{baseUrl}}/orders"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('400 Bad Request', () => pm.response.to.have.status(400));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create order (422 missing shipping fields)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"fullName\": \"A\"\n}" },
+            "url": "{{baseUrl}}/orders"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('422 Unprocessable', () => pm.response.to.have.status(422));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "My orders",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+            "url": "{{baseUrl}}/orders/my?page=1&limit=10"
+          }
+        },
+        {
+          "name": "Order detail (own order)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+            "url": "{{baseUrl}}/orders/{{orderId}}"
+          }
+        },
+        {
+          "name": "Order detail (403 another customer's order)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{newUserToken}}" }],
+            "url": "{{baseUrl}}/orders/{{orderId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('403 Forbidden', () => pm.response.to.have.status(403));",
+                  "pm.test('users cannot read each other\\'s orders', () => pm.expect(pm.response.json().success).to.be.false);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Order detail (404 unknown id)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+            "url": "{{baseUrl}}/orders/000000000000000000000000"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('404 Not Found', () => pm.response.to.have.status(404));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Cancel my order",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"reason\": \"Ordered by mistake\"\n}" },
+            "url": "{{baseUrl}}/orders/{{orderId}}/cancel"
+          }
+        },
+        {
+          "name": "Admin: all orders",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/orders?page=1&limit=10"
+          }
+        },
+        {
+          "name": "Admin: filter orders by status",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/orders?status=Pending"
+          }
+        },
+        {
+          "name": "Admin: all orders (403 as customer)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+            "url": "{{baseUrl}}/orders"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('403 Forbidden', () => pm.response.to.have.status(403));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: update status → Confirmed",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"Confirmed\",\n  \"note\": \"Stock verified\"\n}" },
+            "url": "{{baseUrl}}/orders/{{orderId}}/status"
+          }
+        },
+        {
+          "name": "Admin: illegal transition (400)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"status\": \"Delivered\"\n}" },
+            "url": "{{baseUrl}}/orders/{{orderId}}/status",
+            "description": "Pending → Delivered skips the workflow and must be rejected."
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('400 Bad Request', () => pm.response.to.have.status(400));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: customer's orders",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/orders/user/{{customerId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Reviews",
+      "item": [
+        {
+          "name": "Product reviews (public)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/reviews/product/{{productId}}?page=1&limit=10" }
+        },
+        {
+          "name": "Create review",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{newUserToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"rating\": 5,\n  \"comment\": \"Excellent quality and it arrived earlier than expected.\"\n}"
+            },
+            "url": "{{baseUrl}}/reviews/product/{{productId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) pm.environment.set('reviewId', pm.response.json().data.review._id);"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create review (409 duplicate)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{newUserToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"rating\": 4,\n  \"comment\": \"Trying to review the same product twice.\"\n}" },
+            "url": "{{baseUrl}}/reviews/product/{{productId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('409 Conflict', () => pm.response.to.have.status(409));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Create review (422 rating out of range)",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"rating\": 9,\n  \"comment\": \"x\"\n}" },
+            "url": "{{baseUrl}}/reviews/product/{{productId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('422 Unprocessable', () => pm.response.to.have.status(422));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Update own review",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{newUserToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"rating\": 4,\n  \"comment\": \"Updated after a few more weeks of use.\"\n}" },
+            "url": "{{baseUrl}}/reviews/{{reviewId}}"
+          }
+        },
+        {
+          "name": "Update review (403 not the author)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"rating\": 1\n}" },
+            "url": "{{baseUrl}}/reviews/{{reviewId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('403 Forbidden', () => pm.response.to.have.status(403));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "My reviews",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{newUserToken}}" }],
+            "url": "{{baseUrl}}/reviews/my"
+          }
+        },
+        {
+          "name": "Delete review",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{newUserToken}}" }],
+            "url": "{{baseUrl}}/reviews/{{reviewId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "My profile",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+            "url": "{{baseUrl}}/users/profile"
+          }
+        },
+        {
+          "name": "Update my profile",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                { "key": "name", "value": "Aarav Sharma", "type": "text" },
+                { "key": "phone", "value": "9876543210", "type": "text" }
+              ]
+            },
+            "url": "{{baseUrl}}/users/profile"
+          }
+        },
+        {
+          "name": "Add address",
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{customerToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"label\": \"Office\",\n  \"fullName\": \"Aarav Sharma\",\n  \"phone\": \"9876543210\",\n  \"addressLine\": \"7th Floor, Tech Park, Whitefield\",\n  \"city\": \"Bengaluru\",\n  \"state\": \"Karnataka\",\n  \"postalCode\": \"560066\",\n  \"country\": \"India\"\n}"
+            },
+            "url": "{{baseUrl}}/users/addresses"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "if (pm.response.code === 201) {",
+                  "  const addresses = pm.response.json().data.addresses;",
+                  "  pm.environment.set('addressId', addresses[addresses.length - 1]._id);",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "List addresses",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+            "url": "{{baseUrl}}/users/addresses"
+          }
+        },
+        {
+          "name": "Delete address",
+          "request": {
+            "method": "DELETE",
+            "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+            "url": "{{baseUrl}}/users/addresses/{{addressId}}"
+          }
+        },
+        {
+          "name": "Admin: list users",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/users?page=1&limit=10"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('never exposes password or reset fields', () => {",
+                  "  const raw = JSON.stringify(pm.response.json());",
+                  "  pm.expect(raw).to.not.include('password');",
+                  "  pm.expect(raw).to.not.include('resetPasswordToken');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: list users (403 as customer)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+            "url": "{{baseUrl}}/users"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('403 Forbidden', () => pm.response.to.have.status(403));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Admin: user detail",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/users/{{customerId}}"
+          }
+        },
+        {
+          "name": "Admin: deactivate user",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"isActive\": false\n}" },
+            "url": "{{baseUrl}}/users/{{customerId}}"
+          }
+        },
+        {
+          "name": "Admin: reactivate user",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"isActive\": true\n}" },
+            "url": "{{baseUrl}}/users/{{customerId}}"
+          }
+        },
+        {
+          "name": "Admin: cannot deactivate self (400)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{adminToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"isActive\": false\n}" },
+            "url": "{{baseUrl}}/users/{{adminId}}"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('400 Bad Request', () => pm.response.to.have.status(400));"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Admin",
+      "item": [
+        {
+          "name": "Dashboard",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/admin/dashboard"
+          }
+        },
+        {
+          "name": "Products",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/admin/products"
+          }
+        },
+        {
+          "name": "Orders",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/admin/orders"
+          }
+        },
+        {
+          "name": "Users",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/admin/users"
+          }
+        },
+        {
+          "name": "Dashboard (401 no token)",
+          "request": { "method": "GET", "url": "{{baseUrl}}/admin/dashboard" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('401 Unauthorized', () => pm.response.to.have.status(401));"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Analytics",
+      "item": [
+        {
+          "name": "Dashboard overview",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/analytics/dashboard"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('totals come from the database', () => {",
+                  "  const totals = pm.response.json().data.totals;",
+                  "  ['customers','products','orders','revenue'].forEach(key => pm.expect(totals[key]).to.be.a('number'));",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "Full snapshot",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/analytics/overview?days=30"
+          }
+        },
+        {
+          "name": "Sales & revenue",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/analytics/sales?days=30"
+          }
+        },
+        {
+          "name": "Order statistics",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/analytics/orders"
+          }
+        },
+        {
+          "name": "Top-selling products",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/analytics/products?limit=10"
+          }
+        },
+        {
+          "name": "Customer statistics",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/analytics/users?months=6"
+          }
+        },
+        {
+          "name": "Inventory insights",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{adminToken}}" }],
+            "url": "{{baseUrl}}/analytics/inventory?lowStockThreshold=10"
+          }
+        },
+        {
+          "name": "Analytics (403 as customer)",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+            "url": "{{baseUrl}}/analytics/dashboard"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('403 Forbidden', () => pm.response.to.have.status(403));"]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Error handling",
+      "item": [
+        {
+          "name": "404 unknown route",
+          "request": { "method": "GET", "url": "{{baseUrl}}/does-not-exist" },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('404 Not Found', () => pm.response.to.have.status(404));",
+                  "pm.test('consistent error envelope', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.success).to.be.false;",
+                  "  pm.expect(body.message).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 malformed JSON",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{ this is not valid json" },
+            "url": "{{baseUrl}}/auth/login"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": ["pm.test('400 Bad Request', () => pm.response.to.have.status(400));"]
+              }
+            }
+          ]
+        },
+        {
+          "name": "400 invalid ObjectId",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{customerToken}}" }],
+            "url": "{{baseUrl}}/orders/not-a-valid-object-id"
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('rejected as 400 or 422', () => pm.expect([400, 422]).to.include(pm.response.code));"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ]
+}

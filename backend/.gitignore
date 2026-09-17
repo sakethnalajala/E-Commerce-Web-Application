@@ -1,0 +1,36 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Environment — never commit real secrets
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# Build output
+dist/
+build/
+.vite/
+
+# Logs
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+logs/
+*.log
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# Test & coverage
+coverage/
+.nyc_output/
+
+# Vercel / Render
+.vercel
+.render
