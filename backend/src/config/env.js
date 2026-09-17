@@ -79,6 +79,16 @@ export const env = {
     email: process.env.DEMO_CUSTOMER_EMAIL || 'aarav@example.com',
     password:
       process.env.DEMO_CUSTOMER_PASSWORD || process.env.SEED_CUSTOMER_PASSWORD || 'Customer@12345',
+
+    /**
+     * Showing the demo administrator lets anyone open the console and change
+     * the catalogue, so it is a separate switch: set DEMO_ADMIN_ENABLED=false
+     * on any deployment whose data matters. The seed can restore everything.
+     */
+    adminEnabled: toBoolean(process.env.DEMO_ADMIN_ENABLED, true),
+    adminEmail: process.env.DEMO_ADMIN_EMAIL || process.env.SEED_ADMIN_EMAIL || 'admin@shopsphere.dev',
+    adminPassword:
+      process.env.DEMO_ADMIN_PASSWORD || process.env.SEED_ADMIN_PASSWORD || 'Admin@12345',
   },
 
   clientUrl: (process.env.CLIENT_URL || 'http://localhost:5173').replace(/\/+$/, ''),

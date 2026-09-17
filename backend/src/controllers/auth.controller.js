@@ -5,7 +5,7 @@ import { sendSuccess, sendCreated } from '../utils/ApiResponse.js';
 import { signAccessToken, createPasswordResetToken, hashResetToken } from '../utils/token.js';
 import { sendPasswordResetEmail, isEmailConfigured } from '../services/email.service.js';
 import { providerStatus, verifyGoogle, verifyApple } from '../services/oauth.service.js';
-import { resolveDemoCustomer } from '../services/demoAccount.service.js';
+import { resolveDemoCustomer, resolveDemoAdmin } from '../services/demoAccount.service.js';
 import { env } from '../config/env.js';
 import logger from '../utils/logger.js';
 
@@ -190,7 +190,11 @@ export const changePassword = asyncHandler(async (req, res) => {
 export const getProviders = asyncHandler(async (_req, res) =>
   sendSuccess(res, {
     message: 'Sign-in providers.',
-    data: { ...providerStatus(), demo: { customer: await resolveDemoCustomer() } },
+    data: {
+      ...providerStatus(),
+      // The admin entry is consumed only by the admin sign-in page.
+      demo: { customer: await resolveDemoCustomer(), admin: await resolveDemoAdmin() },
+    },
   })
 );
 

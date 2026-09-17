@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link, Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { loginValidators } from '@/utils/validators';
-import { DEMO_ACCOUNTS, ROLES } from '@/constants';
+import { ROLES } from '@/constants';
 import useForm from '@/hooks/useForm';
 import useAuth from '@/hooks/useAuth';
+import useDemoAccount from '@/hooks/useDemoAccount';
 import useToast from '@/hooks/useToast';
 import Button from '@/components/ui/Button';
 import Input from '@/components/ui/Input';
@@ -43,7 +44,8 @@ const AdminLoginPage = () => {
 
   const redirectTo = location.state?.from?.pathname;
   const adminRequired = Boolean(location.state?.adminRequired);
-  const isDev = import.meta.env.DEV;
+  // Supplied by the API (or a local VITE_DEMO_ADMIN_* override); never hardcoded.
+  const { account: demoAdmin } = useDemoAccount({ role: 'admin' });
 
   // Non-admin credentials are rejected inside `login` before any session is
   // stored, so the guest-route guard never gets a chance to redirect them.
@@ -61,12 +63,12 @@ const AdminLoginPage = () => {
   });
 
   const useDemoAdmin = async () => {
-    if (!DEMO_ACCOUNTS.admin || demoLoading || form.submitting) return;
+    if (!demoAdmin || demoLoading || form.submitting) return;
     form.setSubmitError(null);
     setDemoLoading(true);
-    form.setValues(DEMO_ACCOUNTS.admin);
+    form.setValues(demoAdmin);
     try {
-      await finish(await login(DEMO_ACCOUNTS.admin, ADMIN_ONLY));
+      await finish(await login(demoAdmin, ADMIN_ONLY));
     } catch (error) {
       form.setSubmitError(error.message);
     } finally {
@@ -115,7 +117,7 @@ const AdminLoginPage = () => {
         </Button>
       </form>
 
-      {isDev && DEMO_ACCOUNTS.admin && (
+      {demoAdmin && (
         <section
           aria-labelledby="demo-admin-heading"
           className="relative mt-6 overflow-hidden rounded-2xl border border-accent-400/60 bg-surface shadow-card"
@@ -131,20 +133,20 @@ const AdminLoginPage = () => {
               </span>
               <div>
                 <p id="demo-admin-heading" className="text-sm font-bold text-ink-900">Demo Admin Credentials</p>
-                <p className="text-xs text-ink-500">Seeded local account for trying the console.</p>
+                <p className="text-xs text-ink-500">Seeded account for exploring the console.</p>
               </div>
             </div>
             <span className="inline-flex items-center gap-1.5 rounded-full border border-accent-500/40 bg-accent-100 px-2.5 py-1 text-[10px] font-extrabold uppercase tracking-[0.12em] text-accent-700">
               <span className="h-1.5 w-1.5 rounded-full bg-accent-500" aria-hidden="true" />
-              Development only
+              Demo access
             </span>
           </div>
 
           {/* Credential rows */}
           <dl className="divide-y divide-ink-100 px-4 sm:px-5">
             {[
-              ['Email', DEMO_ACCOUNTS.admin.email, 'email'],
-              ['Password', DEMO_ACCOUNTS.admin.password, 'password'],
+              ['Email', demoAdmin.email, 'email'],
+              ['Password', demoAdmin.password, 'password'],
             ].map(([label, value, key]) => (
               <div key={key} className="flex flex-wrap items-center gap-x-4 gap-y-1 py-3">
                 <dt className="w-20 shrink-0 text-xs font-semibold uppercase tracking-wide text-ink-500">{label}</dt>
@@ -168,8 +170,8 @@ const AdminLoginPage = () => {
               {demoLoading ? 'Signing in…' : 'Sign in with Demo Admin'}
             </Button>
             <p className="mt-2.5 text-center text-[11px] leading-relaxed text-ink-400">
-              Values come from <code className="rounded bg-ink-100 px-1 py-0.5 font-mono text-[10px] text-ink-600">VITE_DEMO_*</code> in
-              <code className="rounded bg-ink-100 px-1 py-0.5 font-mono text-[10px] text-ink-600">.env.development</code> and are stripped from production builds.
+              A shared demo account on sample data — anything you change here is visible to
+              other visitors and can be reset by reseeding.
             </p>
           </div>
         </section>

@@ -3,7 +3,8 @@ import useApiResource from '@/hooks/useApiResource';
 import { DEMO_ACCOUNTS } from '@/constants';
 
 /**
- * The demo customer offered on the login page.
+ * The demo account offered on a sign-in page: the showcase customer, or —
+ * on the admin console sign-in — the demo administrator.
  *
  * Locally configured VITE_DEMO_CUSTOMER_* values win, so a developer can point
  * the button at their own seeded account. Otherwise the server decides: it
@@ -14,12 +15,12 @@ import { DEMO_ACCOUNTS } from '@/constants';
  * The request is the same GET /auth/providers the social buttons make, and the
  * API client de-duplicates it, so this costs no extra round trip.
  */
-const useDemoAccount = () => {
-  const local = DEMO_ACCOUNTS.customer;
+const useDemoAccount = ({ role = 'customer' } = {}) => {
+  const local = role === 'admin' ? DEMO_ACCOUNTS.admin : DEMO_ACCOUNTS.customer;
   const resource = useApiResource(() => authApi.providers(), [], { immediate: !local });
 
   if (local) return { account: local, loading: false };
-  return { account: resource.data?.demo?.customer ?? null, loading: resource.loading };
+  return { account: resource.data?.demo?.[role] ?? null, loading: resource.loading };
 };
 
 export default useDemoAccount;

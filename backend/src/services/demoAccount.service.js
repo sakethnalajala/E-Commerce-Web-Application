@@ -16,52 +16,74 @@ import { env } from '../config/env.js';
 import { ROLES } from '../utils/constants.js';
 import logger from '../utils/logger.js';
 
-let cached;
+const cache = new Map();
 
-export const resolveDemoCustomer = async () => {
-  if (cached !== undefined) return cached;
+/**
+ * Validates one configured demo account against the database.
+ * `expectedRole` is enforced, so a customer entry can never hand out admin
+ * access and an admin entry is only ever offered on the admin sign-in page.
+ */
+const resolveDemo = async ({ key, enabled, email, password, expectedRole }) => {
+  if (cache.has(key)) return cache.get(key);
 
-  const { enabled, email, password } = env.demoLogin;
-  if (!enabled || !email || !password) {
-    cached = null;
-    return cached;
-  }
+  const cached = (value) => {
+    cache.set(key, value);
+    return value;
+  };
+
+  if (!enabled || !email || !password) return cached(null);
 
   try {
     const user = await User.findOne({ email: email.toLowerCase() }).select('+password');
 
     if (!user) {
-      logger.warn(`Demo login disabled: no account for "${email}". Run the seed to create it.`);
-      cached = null;
-    } else if (user.role !== ROLES.CUSTOMER) {
-      // Hard stop: this feature exists to showcase the storefront, never to
-      // hand out elevated access.
-      logger.warn(`Demo login disabled: "${email}" is not a customer account.`);
-      cached = null;
-    } else if (!user.isActive) {
-      logger.warn(`Demo login disabled: "${email}" is deactivated.`);
-      cached = null;
-    } else if (!(await user.comparePassword(password))) {
-      logger.warn(
-        `Demo login disabled: the configured password for "${email}" does not match the stored hash. ` +
-          'Set DEMO_CUSTOMER_PASSWORD to the seeded value.'
-      );
-      cached = null;
-    } else {
-      cached = { email: user.email, password };
+      logger.warn(`Demo ${key} login disabled: no account for "${email}". Run the seed to create it.`);
+      return cached(null);
     }
+    if (user.role !== expectedRole) {
+      // Hard stop: the advertised account must be exactly the role claimed.
+      logger.warn(`Demo ${key} login disabled: "${email}" is not a ${expectedRole} account.`);
+      return cached(null);
+    }
+    if (!user.isActive) {
+      logger.warn(`Demo ${key} login disabled: "${email}" is deactivated.`);
+      return cached(null);
+    }
+    if (!(await user.comparePassword(password))) {
+      logger.warn(
+        `Demo ${key} login disabled: the configured password for "${email}" does not match the stored hash.`
+      );
+      return cached(null);
+    }
+
+    return cached({ email: user.email, password });
   } catch (error) {
     // Never let this optional convenience break the providers endpoint.
-    logger.error(`Demo login check failed: ${error.message}`);
-    cached = null;
+    logger.error(`Demo ${key} login check failed: ${error.message}`);
+    return cached(null);
   }
-
-  return cached;
 };
 
-/** Test seam / used after a reseed changes the account. */
-export const resetDemoCustomerCache = () => {
-  cached = undefined;
-};
+export const resolveDemoCustomer = () =>
+  resolveDemo({
+    key: 'customer',
+    enabled: env.demoLogin.enabled,
+    email: env.demoLogin.email,
+    password: env.demoLogin.password,
+    expectedRole: ROLES.CUSTOMER,
+  });
+
+/** Offered only on the admin sign-in page; disable with DEMO_ADMIN_ENABLED=false. */
+export const resolveDemoAdmin = () =>
+  resolveDemo({
+    key: 'admin',
+    enabled: env.demoLogin.enabled && env.demoLogin.adminEnabled,
+    email: env.demoLogin.adminEmail,
+    password: env.demoLogin.adminPassword,
+    expectedRole: ROLES.ADMIN,
+  });
+
+/** Test seam / used after a reseed changes the accounts. */
+export const resetDemoCache = () => cache.clear();
 
 export default resolveDemoCustomer;
