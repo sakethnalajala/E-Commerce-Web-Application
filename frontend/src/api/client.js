@@ -1,7 +1,24 @@
 import axios from 'axios';
 import { STORAGE_KEYS } from '@/constants';
 
-const baseURL = import.meta.env.VITE_API_URL || '/api/v1';
+const API_PATH = '/api/v1';
+
+/**
+ * Every endpoint in this client is written relative to the API root, so the
+ * base URL must end with `/api/v1`. Deployments commonly set VITE_API_URL to
+ * just the backend host (e.g. https://my-api.onrender.com), which made every
+ * request 404 on the server and surface as "Cannot reach the server" in the
+ * browser (the 404 carries no CORS headers). Appending the path when it is
+ * missing makes either value work; a value that already includes it is left
+ * alone.
+ */
+const resolveBaseUrl = () => {
+  const configured = (import.meta.env.VITE_API_URL ?? '').trim().replace(/\/+$/, '');
+  if (!configured) return API_PATH;
+  return configured.endsWith(API_PATH) ? configured : `${configured}${API_PATH}`;
+};
+
+const baseURL = resolveBaseUrl();
 
 const client = axios.create({
   baseURL,

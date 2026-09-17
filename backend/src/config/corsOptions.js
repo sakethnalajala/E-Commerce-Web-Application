@@ -1,5 +1,6 @@
 import { env } from './env.js';
 import ApiError from '../utils/ApiError.js';
+import logger from '../utils/logger.js';
 
 /**
  * Allow-list based CORS. Production only ever accepts the configured frontend
@@ -33,6 +34,15 @@ export const corsOptions = {
 
     if (allowedOrigins.includes(normalized)) return callback(null, true);
     if (previewOriginsAllowed && VERCEL_PREVIEW_PATTERN.test(normalized)) return callback(null, true);
+
+    // A blocked origin reaches the browser as an opaque network failure
+    // ("cannot reach the server"), so say plainly in the logs what was
+    // rejected and what is allowed — otherwise this is very hard to diagnose
+    // from the deployed frontend alone.
+    logger.warn(
+      `CORS rejected origin "${normalized}". Allowed: ${allowedOrigins.join(', ') || '(none)'}. ` +
+        'Set CLIENT_URL (or ADDITIONAL_CORS_ORIGINS) to include this origin.'
+    );
 
     return callback(ApiError.forbidden(`Origin ${origin} is not allowed by the CORS policy`));
   },

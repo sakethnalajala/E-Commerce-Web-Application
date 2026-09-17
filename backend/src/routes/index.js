@@ -10,6 +10,7 @@ import reviewRoutes from './review.routes.js';
 import adminRoutes from './admin.routes.js';
 import analyticsRoutes from './analytics.routes.js';
 import { isCloudinaryConfigured } from '../services/cloudinary.service.js';
+import { allowedOrigins } from '../config/corsOptions.js';
 import { getDatabaseInfo } from '../config/db.js';
 import { env } from '../config/env.js';
 
@@ -32,6 +33,9 @@ router.get('/health', (_req, res) => {
       databaseMode: database.mode,
       databaseName: database.name,
       cloudinary: isCloudinaryConfigured ? 'configured' : 'not-configured',
+      // Public frontend URLs, not secrets — exposed so a browser CORS failure
+      // can be diagnosed from the deployed site without Render log access.
+      corsAllowedOrigins: allowedOrigins,
       timestamp: new Date().toISOString(),
     },
   });

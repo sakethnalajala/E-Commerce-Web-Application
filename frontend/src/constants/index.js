@@ -53,12 +53,18 @@ export const ADMIN_PAGE_SIZE = 10;
 export const CURRENCY = { locale: 'en-IN', code: 'INR' };
 
 /**
- * Demo logins are opt-in via env and intended for local development only.
+ * Demo logins are strictly opt-in: nothing appears unless
+ * VITE_ENABLE_DEMO_LOGIN is "true" AND the matching credentials are supplied.
  * Values come from VITE_* variables, never from source.
+ *
+ * The customer demo may be enabled on a deployed build — a public showcase
+ * account signing in through the normal /auth/login endpoint. The admin demo
+ * is additionally gated on `import.meta.env.DEV` (a build-time constant, so
+ * the literals are eliminated from a production bundle): administrator
+ * credentials must never ship to a public site.
  */
-// `import.meta.env.DEV` is a build-time constant, so in a production build this
-// whole branch (and any VITE_DEMO_* literal) is eliminated from the bundle.
-const demoEnabled = import.meta.env.DEV && import.meta.env.VITE_ENABLE_DEMO_LOGIN === 'true';
+const demoEnabled = import.meta.env.VITE_ENABLE_DEMO_LOGIN === 'true';
+const adminDemoEnabled = demoEnabled && import.meta.env.DEV;
 
 export const DEMO_ACCOUNTS = {
   enabled: demoEnabled,
@@ -67,7 +73,7 @@ export const DEMO_ACCOUNTS = {
       ? { email: import.meta.env.VITE_DEMO_CUSTOMER_EMAIL, password: import.meta.env.VITE_DEMO_CUSTOMER_PASSWORD }
       : null,
   admin:
-    demoEnabled && import.meta.env.VITE_DEMO_ADMIN_EMAIL && import.meta.env.VITE_DEMO_ADMIN_PASSWORD
+    adminDemoEnabled && import.meta.env.VITE_DEMO_ADMIN_EMAIL && import.meta.env.VITE_DEMO_ADMIN_PASSWORD
       ? { email: import.meta.env.VITE_DEMO_ADMIN_EMAIL, password: import.meta.env.VITE_DEMO_ADMIN_PASSWORD }
       : null,
 };
